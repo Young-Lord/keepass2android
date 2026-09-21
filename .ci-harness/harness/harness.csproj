@@ -36,6 +36,10 @@
     <Compile Include="$(RepoRoot)/src/Kp2aBusinessLogic/SearchDbHelper.cs" />
     <Compile Include="$(RepoRoot)/src/Kp2aBusinessLogic/UiStringKey.cs" />
     <!-- only present on branches that extract the URL matching helpers -->
+    <Compile Include="$(RepoRoot)/src/Kp2aAutofillParser/UrlHostMatching.cs"
+             Condition="Exists('$(RepoRoot)/src/Kp2aAutofillParser/UrlHostMatching.cs')" />
+    <Compile Include="$(RepoRoot)/src/Kp2aAutofillParser/AdditionalUrlFields.cs"
+             Condition="Exists('$(RepoRoot)/src/Kp2aAutofillParser/AdditionalUrlFields.cs')" />
     <Compile Include="$(RepoRoot)/src/Kp2aAutofillParser/UrlMatching.cs"
              Condition="Exists('$(RepoRoot)/src/Kp2aAutofillParser/UrlMatching.cs')" />
     <Compile Include="$(RepoRoot)/src/Kp2aAutofillParser/UrlMatchRank.cs"
