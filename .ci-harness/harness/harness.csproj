@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <UseAppHost>false</UseAppHost>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>harness</AssemblyName>
+    <RootNamespace>harness</RootNamespace>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <RollForward>LatestMajor</RollForward>
+    <!-- repo root: next to the checkout when the harness sits inside it (CI), otherwise the local clone -->
+    <_HarnessRepoRoot>$(MSBuildThisFileDirectory)../..</_HarnessRepoRoot>
+    <RepoRoot Condition="'$(RepoRoot)' == '' AND Exists('$(_HarnessRepoRoot)/src/Kp2aBusinessLogic/SearchDbHelper.cs')">$(_HarnessRepoRoot)</RepoRoot>
+    <RepoRoot Condition="'$(RepoRoot)' == ''">/home/niko/Projects/keepass2android</RepoRoot>
+    <NoWarn>$(NoWarn);CS0618;CS0612;CS0067;CS0414;CS0649;CS0169;CS0168;CS0219;CS8632;SYSLIB0011</NoWarn>
+    <DefineConstants Condition="Exists('$(RepoRoot)/src/Kp2aAutofillParser/UrlMatchRank.cs')">$(DefineConstants);HAS_RANK</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+  <!-- Real sources: everything except the four files that need Android/Java UI APIs. -->
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+    <Compile Include="$(RepoRoot)/src/KeePassLib2Android/**/*.cs"
+             Exclude="$(RepoRoot)/src/KeePassLib2Android/Kp2aLog.cs;$(RepoRoot)/src/KeePassLib2Android/Utility/GfxUtil.cs;$(RepoRoot)/src/KeePassLib2Android/Utility/MessageService.cs;$(RepoRoot)/src/KeePassLib2Android/Native/NativeLib.cs" />
+    <Compile Include="$(RepoRoot)/src/Kp2aBusinessLogic/Utils/Spr/**/*.cs" />
+    <Compile Include="$(RepoRoot)/src/Kp2aBusinessLogic/Utils/EntryUtil.cs" />
+    <Compile Include="$(RepoRoot)/src/Kp2aBusinessLogic/PwUuidEqualityComparer.cs" />
+    <Compile Include="$(RepoRoot)/src/Kp2aBusinessLogic/SearchDbHelper.cs" />
+    <Compile Include="$(RepoRoot)/src/Kp2aBusinessLogic/UiStringKey.cs" />
+    <!-- only present on branches that extract the URL matching helpers -->
+    <Compile Include="$(RepoRoot)/src/Kp2aAutofillParser/UrlMatching.cs"
+             Condition="Exists('$(RepoRoot)/src/Kp2aAutofillParser/UrlMatching.cs')" />
+    <Compile Include="$(RepoRoot)/src/Kp2aAutofillParser/UrlMatchRank.cs"
+             Condition="Exists('$(RepoRoot)/src/Kp2aAutofillParser/UrlMatchRank.cs')" />
+  </ItemGroup>
+
+</Project>

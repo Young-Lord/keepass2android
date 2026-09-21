@@ -344,6 +344,13 @@ jobs:
         dotnet test src/Kp2aAutofillParser.Tests
 
 
+    # scratch-only: compile the real SearchDbHelper.cs (net8.0) and replay the phase
+    # chain of ShareUrlResults.GetSearchResultsForUrl
+    - name: URL matching harness (scratch)
+      run: |
+        cd .ci-harness/harness
+        dotnet run
+
     - name: Build keepass2android (net)
       run: |
         make dotnetbuild Flavor=Net          
