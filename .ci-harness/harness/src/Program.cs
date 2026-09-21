@@ -88,27 +88,30 @@ namespace harness
 
     static void Matrix()
     {
-      var rows = new (string query, string urlValue, bool expectHost, bool expectHostNoSub)[]
+      // branchDependent: true for the rows the IDN fix changes (they mismatch on
+      // branches without it), false for the rows that must hold on every branch.
+      var rows = new (string query, string urlValue, bool expectHost, bool expectHostNoSub, bool branchDependent)[]
       {
         // query, entry URL value, SearchForHost(false) hits, SearchForHost(true) hits
-        (PageHost, "tinyauth.oracle-noddy.爱来自世界.top", true, true),           // IDN
-        (PageHost, "爱来自世界.top", true, true),                                  // IDN parent
-        ("xn--rhqv03d5th68cnuv.top", "爱来自世界.top", true, true),                 // IDN other direction
-        ("sub.example.com", "example.com", true, true),
-        ("sub.example.com", "https://examplex.com", false, false),
-        ("192.168.188.2", "192.168.188.2", true, true),
-        ("192.168.188.2", "https://192.168.188.3", false, false),
-        ("example.com", "https://www.example.com", false, true),                   // www. stripped only when allowSubdomains
-        ("accounts.google.com", "https://google.com:443/x", true, true),
-        ("accounts.google.com", "https://accounts.google.com", true, true),
-        ("example.com", "https://example.com:8443", true, true),                  // port ignored
-        ("_dmarc.example.com", "_dmarc.example.com", true, true),                 // underscore host
-        ("example.com", "", false, false),                                        // empty URL
-        ("example.com", "kdbx://c:/data/abc.kdbx", false, false),                 // file path
+        (PageHost, "tinyauth.oracle-noddy.爱来自世界.top", true, true, true),           // IDN
+        (PageHost, "爱来自世界.top", true, true, true),                                  // IDN parent
+        ("xn--rhqv03d5th68cnuv.top", "爱来自世界.top", true, true, true),                 // IDN other direction
+        ("sub.example.com", "example.com", true, true, false),
+        ("sub.example.com", "https://examplex.com", false, false, false),
+        ("192.168.188.2", "192.168.188.2", true, true, false),
+        ("192.168.188.2", "https://192.168.188.3", false, false, false),
+        ("example.com", "https://www.example.com", false, true, false),                   // www. stripped only when allowSubdomains
+        ("accounts.google.com", "https://google.com:443/x", true, true, false),
+        ("accounts.google.com", "https://accounts.google.com", true, true, false),
+        ("example.com", "https://example.com:8443", true, true, false),                  // port ignored
+        ("_dmarc.example.com", "_dmarc.example.com", true, true, false),                 // underscore host
+        ("example.com", "", false, false, false),                                        // empty URL
+        ("example.com", "kdbx://c:/data/abc.kdbx", false, false, false),                 // file path
       };
 
       Console.WriteLine("query | entry URL | expect(false/true) | actual(false/true) | ok");
-      int bad = 0;
+      int stableBad = 0;
+      int idnBad = 0;
       foreach (var row in rows)
       {
         var db = MakeDb();
@@ -116,11 +119,19 @@ namespace harness
         bool actFalse = Helper.SearchForHost(db, row.query, false).Entries.Any();
         bool actTrue = Helper.SearchForHost(db, row.query, true).Entries.Any();
         bool ok = actFalse == row.expectHost && actTrue == row.expectHostNoSub;
-        if (!ok) bad++;
+        if (!ok)
+        {
+          if (row.branchDependent) idnBad++;
+          else stableBad++;
+        }
         Console.WriteLine($"{row.query} | {row.urlValue} | {row.expectHost}/{row.expectHostNoSub} | {actFalse}/{actTrue} | {(ok ? "ok" : "MISMATCH")}");
       }
-      Console.WriteLine($"matrix mismatches: {bad}");
+      Console.WriteLine($"matrix mismatches: {stableBad + idnBad} (stable rows: {stableBad}, idn rows: {idnBad})");
+      StableMatrixMismatches = stableBad;
     }
+
+    /// <summary>Mismatches of the matrix rows that must hold on every branch.</summary>
+    static int StableMatrixMismatches;
 
     // ---- androidapp:// scenario ---------------------------------------------
 
@@ -173,7 +184,7 @@ namespace harness
       Console.WriteLine($"FINAL        : {Titles(Results(db, Query))}");
     }
 
-    static void Main(string[] args)
+    static int Main(string[] args)
     {
       Console.WriteLine("== user scenario ==");
       Console.WriteLine($"page url: https://{PageHost}:18081");
@@ -195,6 +206,47 @@ namespace harness
       Console.WriteLine();
       RankDump();
 #endif
+
+      return Invariants();
+    }
+
+    /// <summary>
+    /// Returns the number of broken invariants: zero means the branch behaves correctly.
+    /// The invariants cover what the fixes claim and what must not regress; the candidate
+    /// order (the first entry is the one the autofill dropdown offers) is only reported,
+    /// because ordering by precision is not part of these fixes.
+    /// </summary>
+    static int Invariants()
+    {
+      int broken = 0;
+
+      void Check(bool ok, string what)
+      {
+        Console.WriteLine($"invariant: {(ok ? "ok" : "BROKEN")} - {what}");
+        if (!ok) broken++;
+      }
+
+      string scenarioFinal = Titles(Results(ScenarioDb(), Query));
+      Check(scenarioFinal.Contains("tiny"),
+        $"the reported scenario lists the entry 'tiny' (got '{scenarioFinal}')");
+      Check(StableMatrixMismatches == 0,
+        $"no regression in the matrix rows that must hold on every branch (got {StableMatrixMismatches} mismatches)");
+
+      var appDb = MakeDb();
+      Add(appDb, "A", ("KP2A_URL_1", "androidapp://com.example.a"));
+      Add(appDb, "B", ("AndroidApp1", "androidapp://com.example.a"));
+      Check(Titles(Results(appDb, "androidapp://com.example.a")) == "A, B",
+        "an androidapp:// URL remembered in KP2A_URL_1 or AndroidApp1 finds both entries");
+
+      var appOnly = MakeDb();
+      Add(appOnly, "apponly", ("AndroidApp1", "androidapp://com.example.a"));
+      Check(Titles(Results(appOnly, "example.com")) == "<none>",
+        "an app identifier does not match a web host");
+
+      Console.WriteLine($"invariants broken: {broken}");
+      Console.WriteLine($"observation: candidate order '{scenarioFinal}' - Kp2aAutofillService keeps only " +
+        "Take(2 - numDisableDatasets) = 1 candidate by default, so the first entry is the one offered");
+      return broken;
     }
 
 #if HAS_RANK
