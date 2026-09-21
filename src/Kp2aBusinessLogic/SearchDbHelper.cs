@@ -16,6 +16,7 @@ This file is part of Keepass2Android, Copyright 2013 Philipp Crocoll. This file 
   */
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using KeePass.Util.Spr;
 using KeePassLib;
@@ -119,6 +120,32 @@ namespace keepass2android
       return UrlUtil.GetHost(url.Trim());
     }
 
+    private static readonly IdnMapping s_idnMapping = new IdnMapping();
+
+    /// <summary>
+    /// Returns the host in ASCII (punycode) notation.
+    /// </summary>
+    /// Browsers and the autofill framework pass hosts in punycode notation
+    /// (e.g. "xn--rhqv03d5th68cnuv.top") while entries often contain the Unicode
+    /// notation (e.g. "爱来自世界.top"). Both notations denote the same host and
+    /// must be treated as equal when matching URLs.
+    private static String NormalizeHost(String host)
+    {
+      if (String.IsNullOrEmpty(host))
+        return host;
+
+      try
+      {
+        return s_idnMapping.GetAscii(host);
+      }
+      catch (ArgumentException)
+      {
+        // Not a valid domain name (invalid characters, labels longer than 63
+        // characters, ...): compare it as it is.
+        return host;
+      }
+    }
+
     public PwGroup SearchForHost(Database database, String url, bool allowSubdomains)
     {
       String host = ExtractHost(url);
@@ -126,21 +153,22 @@ namespace keepass2android
       PwGroup pgResults = new PwGroup(true, true, strGroupName, PwIcon.EMailSearch) { IsVirtual = true };
       if (String.IsNullOrWhiteSpace(host))
         return pgResults;
+      String normalizedHost = NormalizeHost(host);
       foreach (PwEntry entry in database.EntriesById.Values)
       {
         if (!entry.GetSearchingEnabled())
           continue;
         string otherUrl = entry.Strings.ReadSafe(PwDefs.UrlField);
         otherUrl = SprEngine.Compile(otherUrl, new SprContext(entry, database.KpDatabase, SprCompileFlags.References));
-        String otherHost = ExtractHost(otherUrl);
+        String otherHost = NormalizeHost(ExtractHost(otherUrl));
         if ((allowSubdomains) && (otherHost.StartsWith("www.")))
           otherHost = otherHost.Substring(4); //remove "www."
         if (String.IsNullOrWhiteSpace(otherHost))
         {
           continue;
         }
-        if (string.Equals(host, otherHost, StringComparison.OrdinalIgnoreCase) ||
-            host.EndsWith("." + otherHost, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(normalizedHost, otherHost, StringComparison.OrdinalIgnoreCase) ||
+            normalizedHost.EndsWith("." + otherHost, StringComparison.OrdinalIgnoreCase))
         {
           pgResults.AddEntry(entry, false);
         }
