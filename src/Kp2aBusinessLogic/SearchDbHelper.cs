@@ -16,8 +16,8 @@ This file is part of Keepass2Android, Copyright 2013 Philipp Crocoll. This file 
   */
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Text.RegularExpressions;
+using Kp2aAutofillParser;
 using KeePass.Util.Spr;
 using KeePassLib;
 using KeePassLib.Collections;
@@ -32,11 +32,11 @@ namespace keepass2android
   /// </summary>
   public class SearchDbHelper
   {
-    // Field names for additional URLs: "KP2A_URL", "KP2A_URL_1", ... (written by
-    // "Remember search text" and by KeePassXC's "Additional URLs" feature) and
-    // "AndroidApp1", ... (written by Util.SetNextFreeUrlField for androidapp:// URLs)
-    private const string AdditionalUrlFieldPrefix = "KP2A_URL";
-    private const string AndroidAppFieldPrefix = "AndroidApp";
+    /// <summary>
+    /// Scheme of the URLs which identify an installed app instead of a web site (see
+    /// Util.SetNextFreeUrlField). They are stored in the additional URL fields, but
+    /// they are no host names.
+    /// </summary>
     private const string AndroidAppScheme = "androidapp://";
 
     private readonly IKp2aApp _app;
@@ -154,16 +154,10 @@ namespace keepass2android
 
       foreach (KeyValuePair<string, ProtectedString> kvp in entry.Strings)
       {
-        if (!IsAdditionalUrlFieldName(kvp.Key))
+        if (!AdditionalUrlFields.IsAdditionalUrlFieldName(kvp.Key))
           continue;
         yield return GetCompiledFieldValue(entry, database, kvp.Key);
       }
-    }
-
-    private static bool IsAdditionalUrlFieldName(string fieldName)
-    {
-      return fieldName.StartsWith(AdditionalUrlFieldPrefix, StringComparison.OrdinalIgnoreCase) ||
-             fieldName.StartsWith(AndroidAppFieldPrefix, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetCompiledFieldValue(PwEntry entry, Database database, string fieldName)
@@ -172,31 +166,6 @@ namespace keepass2android
       return SprEngine.Compile(value, new SprContext(entry, database.KpDatabase, SprCompileFlags.References));
     }
 
-    private static readonly IdnMapping s_idnMapping = new IdnMapping();
-
-    /// <summary>
-    /// Returns the host in ASCII (punycode) notation.
-    /// </summary>
-    /// Browsers and the autofill framework pass hosts in punycode notation
-    /// (e.g. "xn--rhqv03d5th68cnuv.top") while entries often contain the Unicode
-    /// notation (e.g. "爱来自世界.top"). Both notations denote the same host and
-    /// must be treated as equal when matching URLs.
-    private static String NormalizeHost(String host)
-    {
-      if (String.IsNullOrEmpty(host))
-        return host;
-
-      try
-      {
-        return s_idnMapping.GetAscii(host);
-      }
-      catch (ArgumentException)
-      {
-        // Not a valid domain name (invalid characters, labels longer than 63
-        // characters, ...): compare it as it is.
-        return host;
-      }
-    }
     public PwGroup SearchForHost(Database database, String url, bool allowSubdomains)
     {
       String host = ExtractHost(url);
@@ -204,7 +173,6 @@ namespace keepass2android
       PwGroup pgResults = new PwGroup(true, true, strGroupName, PwIcon.EMailSearch) { IsVirtual = true };
       if (String.IsNullOrWhiteSpace(host))
         return pgResults;
-      String normalizedHost = NormalizeHost(host);
       foreach (PwEntry entry in database.EntriesById.Values)
       {
         if (!entry.GetSearchingEnabled())
@@ -214,15 +182,7 @@ namespace keepass2android
           if (otherUrl.StartsWith(AndroidAppScheme, StringComparison.OrdinalIgnoreCase))
             continue; // app identifiers are not host names
 
-          String otherHost = NormalizeHost(ExtractHost(otherUrl));
-          if ((allowSubdomains) && (otherHost.StartsWith("www.")))
-            otherHost = otherHost.Substring(4); //remove "www."
-          if (String.IsNullOrWhiteSpace(otherHost))
-          {
-            continue;
-          }
-          if (string.Equals(normalizedHost, otherHost, StringComparison.OrdinalIgnoreCase) ||
-              normalizedHost.EndsWith("." + otherHost, StringComparison.OrdinalIgnoreCase))
+          if (UrlHostMatching.HostsMatch(host, ExtractHost(otherUrl), allowSubdomains))
           {
             pgResults.AddEntry(entry, false);
             break;
