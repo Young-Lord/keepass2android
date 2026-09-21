@@ -17,6 +17,7 @@ This file is part of Keepass2Android, Copyright 2013 Philipp Crocoll. This file 
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using Kp2aAutofillParser;
 using KeePass.Util.Spr;
 using KeePassLib;
 using KeePassLib.Collections;
@@ -31,11 +32,11 @@ namespace keepass2android
   /// </summary>
   public class SearchDbHelper
   {
-    // Field names for additional URLs: "KP2A_URL", "KP2A_URL_1", ... (written by
-    // "Remember search text" and by KeePassXC's "Additional URLs" feature) and
-    // "AndroidApp1", ... (written by Util.SetNextFreeUrlField for androidapp:// URLs)
-    private const string AdditionalUrlFieldPrefix = "KP2A_URL";
-    private const string AndroidAppFieldPrefix = "AndroidApp";
+    /// <summary>
+    /// Scheme of the URLs which identify an installed app instead of a web site (see
+    /// Util.SetNextFreeUrlField). They are stored in the additional URL fields, but
+    /// they are no host names.
+    /// </summary>
     private const string AndroidAppScheme = "androidapp://";
 
     private readonly IKp2aApp _app;
@@ -145,7 +146,7 @@ namespace keepass2android
 
     /// <summary>
     /// Returns the URL values of an entry which are relevant for URL matching: the
-    /// standard URL field and all additional URL fields (see IsAdditionalUrlFieldName).
+    /// standard URL field and all additional URL fields (see AdditionalUrlFields).
     /// </summary>
     private static IEnumerable<string> GetUrlFieldValues(PwEntry entry, Database database)
     {
@@ -153,16 +154,10 @@ namespace keepass2android
 
       foreach (KeyValuePair<string, ProtectedString> kvp in entry.Strings)
       {
-        if (!IsAdditionalUrlFieldName(kvp.Key))
+        if (!AdditionalUrlFields.IsAdditionalUrlFieldName(kvp.Key))
           continue;
         yield return GetCompiledFieldValue(entry, database, kvp.Key);
       }
-    }
-
-    private static bool IsAdditionalUrlFieldName(string fieldName)
-    {
-      return fieldName.StartsWith(AdditionalUrlFieldPrefix, StringComparison.OrdinalIgnoreCase) ||
-             fieldName.StartsWith(AndroidAppFieldPrefix, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetCompiledFieldValue(PwEntry entry, Database database, string fieldName)
