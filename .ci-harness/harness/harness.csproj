@@ -13,10 +13,14 @@
     <RootNamespace>harness</RootNamespace>
     <InvariantGlobalization>false</InvariantGlobalization>
     <RollForward>LatestMajor</RollForward>
-    <!-- repo root: next to the checkout when the harness sits inside it (CI), otherwise the local clone -->
+    <!-- repo root: next to the checkout when the harness sits inside it (CI), then the
+         directory CI checks the repository out to, otherwise the local clone -->
     <_HarnessRepoRoot>$(MSBuildThisFileDirectory)../..</_HarnessRepoRoot>
     <RepoRoot Condition="'$(RepoRoot)' == '' AND Exists('$(_HarnessRepoRoot)/src/Kp2aBusinessLogic/SearchDbHelper.cs')">$(_HarnessRepoRoot)</RepoRoot>
+    <RepoRoot Condition="'$(RepoRoot)' == '' AND '$(GITHUB_WORKSPACE)' != ''">$(GITHUB_WORKSPACE)</RepoRoot>
     <RepoRoot Condition="'$(RepoRoot)' == ''">/home/niko/Projects/keepass2android</RepoRoot>
+    <!-- generated sources must never be compiled into the harness -->
+    <_GeneratedSources>$(RepoRoot)/**/obj/**;$(RepoRoot)/**/bin/**</_GeneratedSources>
     <NoWarn>$(NoWarn);CS0618;CS0612;CS0067;CS0414;CS0649;CS0169;CS0168;CS0219;CS8632;SYSLIB0011</NoWarn>
     <DefineConstants Condition="Exists('$(RepoRoot)/src/Kp2aAutofillParser/UrlMatchRank.cs')">$(DefineConstants);HAS_RANK</DefineConstants>
   </PropertyGroup>
@@ -29,9 +33,9 @@
   <ItemGroup>
     <Compile Include="src/**/*.cs" />
     <Compile Include="$(RepoRoot)/src/KeePassLib2Android/**/*.cs"
-             Exclude="$(RepoRoot)/src/KeePassLib2Android/Kp2aLog.cs;$(RepoRoot)/src/KeePassLib2Android/Utility/GfxUtil.cs;$(RepoRoot)/src/KeePassLib2Android/Utility/MessageService.cs;$(RepoRoot)/src/KeePassLib2Android/Native/NativeLib.cs" />
-    <Compile Include="$(RepoRoot)/src/Kp2aBusinessLogic/Utils/Spr/**/*.cs" />
-    <Compile Include="$(RepoRoot)/src/Kp2aBusinessLogic/Utils/EntryUtil.cs" />
+             Exclude="$(_GeneratedSources);$(RepoRoot)/src/KeePassLib2Android/Kp2aLog.cs;$(RepoRoot)/src/KeePassLib2Android/Utility/GfxUtil.cs;$(RepoRoot)/src/KeePassLib2Android/Utility/MessageService.cs;$(RepoRoot)/src/KeePassLib2Android/Native/NativeLib.cs" />
+    <Compile Include="$(RepoRoot)/src/Kp2aBusinessLogic/Utils/Spr/**/*.cs" Exclude="$(_GeneratedSources)" />
+    <Compile Include="$(RepoRoot)/src/Kp2aBusinessLogic/Utils/EntryUtil.cs" Exclude="$(_GeneratedSources)" />
     <Compile Include="$(RepoRoot)/src/Kp2aBusinessLogic/PwUuidEqualityComparer.cs" />
     <Compile Include="$(RepoRoot)/src/Kp2aBusinessLogic/SearchDbHelper.cs" />
     <Compile Include="$(RepoRoot)/src/Kp2aBusinessLogic/UiStringKey.cs" />
