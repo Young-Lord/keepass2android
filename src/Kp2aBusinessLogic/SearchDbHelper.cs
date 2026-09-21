@@ -21,6 +21,7 @@ using KeePass.Util.Spr;
 using KeePassLib;
 using KeePassLib.Collections;
 using KeePassLib.Interfaces;
+using KeePassLib.Security;
 using KeePassLib.Utility;
 
 namespace keepass2android
@@ -30,6 +31,13 @@ namespace keepass2android
   /// </summary>
   public class SearchDbHelper
   {
+    // Field names for additional URLs: "KP2A_URL", "KP2A_URL_1", ... (written by
+    // "Remember search text" and by KeePassXC's "Additional URLs" feature) and
+    // "AndroidApp1", ... (written by Util.SetNextFreeUrlField for androidapp:// URLs)
+    private const string AdditionalUrlFieldPrefix = "KP2A_URL";
+    private const string AndroidAppFieldPrefix = "AndroidApp";
+    private const string AndroidAppScheme = "androidapp://";
+
     private readonly IKp2aApp _app;
 
 
@@ -87,6 +95,22 @@ namespace keepass2android
 
       database.Root.SearchEntries(sp, listResults, new NullStatusLogger());
 
+      // SearchEntries only examines the URL field. Additional URL fields
+      // (KP2A_URL, KP2A_URL_1, ...) must be considered as well, so that a URL
+      // remembered there is found with the same priority as one in the URL field.
+      foreach (PwEntry entry in database.EntriesById.Values)
+      {
+        if (!entry.GetSearchingEnabled() || (pgResults.Entries.IndexOf(entry) >= 0))
+          continue;
+        foreach (string urlValue in GetUrlFieldValues(entry, database))
+        {
+          if (urlValue.IndexOf(url, StringComparison.InvariantCultureIgnoreCase) >= 0)
+          {
+            pgResults.AddEntry(entry, false);
+            break;
+          }
+        }
+      }
 
       return pgResults;
 
@@ -119,6 +143,34 @@ namespace keepass2android
       return UrlUtil.GetHost(url.Trim());
     }
 
+    /// <summary>
+    /// Returns the URL values of an entry which are relevant for URL matching: the
+    /// standard URL field and all additional URL fields (see IsAdditionalUrlFieldName).
+    /// </summary>
+    private static IEnumerable<string> GetUrlFieldValues(PwEntry entry, Database database)
+    {
+      yield return GetCompiledFieldValue(entry, database, PwDefs.UrlField);
+
+      foreach (KeyValuePair<string, ProtectedString> kvp in entry.Strings)
+      {
+        if (!IsAdditionalUrlFieldName(kvp.Key))
+          continue;
+        yield return GetCompiledFieldValue(entry, database, kvp.Key);
+      }
+    }
+
+    private static bool IsAdditionalUrlFieldName(string fieldName)
+    {
+      return fieldName.StartsWith(AdditionalUrlFieldPrefix, StringComparison.OrdinalIgnoreCase) ||
+             fieldName.StartsWith(AndroidAppFieldPrefix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetCompiledFieldValue(PwEntry entry, Database database, string fieldName)
+    {
+      string value = entry.Strings.ReadSafe(fieldName);
+      return SprEngine.Compile(value, new SprContext(entry, database.KpDatabase, SprCompileFlags.References));
+    }
+
     public PwGroup SearchForHost(Database database, String url, bool allowSubdomains)
     {
       String host = ExtractHost(url);
@@ -130,19 +182,24 @@ namespace keepass2android
       {
         if (!entry.GetSearchingEnabled())
           continue;
-        string otherUrl = entry.Strings.ReadSafe(PwDefs.UrlField);
-        otherUrl = SprEngine.Compile(otherUrl, new SprContext(entry, database.KpDatabase, SprCompileFlags.References));
-        String otherHost = ExtractHost(otherUrl);
-        if ((allowSubdomains) && (otherHost.StartsWith("www.")))
-          otherHost = otherHost.Substring(4); //remove "www."
-        if (String.IsNullOrWhiteSpace(otherHost))
+        foreach (string otherUrl in GetUrlFieldValues(entry, database))
         {
-          continue;
-        }
-        if (string.Equals(host, otherHost, StringComparison.OrdinalIgnoreCase) ||
-            host.EndsWith("." + otherHost, StringComparison.OrdinalIgnoreCase))
-        {
-          pgResults.AddEntry(entry, false);
+          if (otherUrl.StartsWith(AndroidAppScheme, StringComparison.OrdinalIgnoreCase))
+            continue; // app identifiers are not host names
+
+          String otherHost = ExtractHost(otherUrl);
+          if ((allowSubdomains) && (otherHost.StartsWith("www.")))
+            otherHost = otherHost.Substring(4); //remove "www."
+          if (String.IsNullOrWhiteSpace(otherHost))
+          {
+            continue;
+          }
+          if (string.Equals(host, otherHost, StringComparison.OrdinalIgnoreCase) ||
+              host.EndsWith("." + otherHost, StringComparison.OrdinalIgnoreCase))
+          {
+            pgResults.AddEntry(entry, false);
+            break;
+          }
         }
       }
       return pgResults;
