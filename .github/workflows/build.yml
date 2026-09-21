@@ -349,7 +349,8 @@ jobs:
     - name: URL matching harness (scratch)
       continue-on-error: true
       run: |
-        cd .ci-harness/harness
+        Copy-Item -Recurse .ci-harness "$env:RUNNER_TEMP\ci-harness"
+        cd "$env:RUNNER_TEMP\ci-harness\harness"
         dotnet run
 
     - name: Build keepass2android (net)
