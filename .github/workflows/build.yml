@@ -1,4 +1,4 @@
-name: Build keepass2android app
+﻿name: Build keepass2android app
 
 on:
   push:
@@ -336,6 +336,13 @@ jobs:
     - name: Check formatting (scratch)
       continue-on-error: true
       run: dotnet format src/KeePass.sln --verify-no-changes --include src/Kp2aBusinessLogic/SearchDbHelper.cs
+
+    # scratch-only: run the net8.0 test projects before the Android build, whose
+    # binding generation is currently broken on the runner image
+    - name: Test net8.0 projects (scratch)
+      run: |
+        dotnet test src/Kp2aAutofillParser.Tests
+
 
     - name: Build keepass2android (net)
       run: |
