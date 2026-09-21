@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      # scratch-only: lets a fix branch be built by CI without opening a PR
+      - 'ci/**'
   pull_request:
 
 jobs:
@@ -322,6 +324,11 @@ jobs:
 
     - name: Install NuGet dependencies (net)
       run: make nuget Flavor=Net
+
+    # scratch-only: report whether the changed file complies with `dotnet format`
+    - name: Check formatting (scratch)
+      continue-on-error: true
+      run: dotnet format src/KeePass.sln --verify-no-changes --include src/Kp2aBusinessLogic/SearchDbHelper.cs
 
     - name: Build keepass2android (net)
       run: |
