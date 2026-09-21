@@ -22,6 +22,7 @@ using KeePass.Util.Spr;
 using KeePassLib;
 using KeePassLib.Collections;
 using KeePassLib.Interfaces;
+using KeePassLib.Security;
 using KeePassLib.Utility;
 
 namespace keepass2android
@@ -31,6 +32,13 @@ namespace keepass2android
   /// </summary>
   public class SearchDbHelper
   {
+    /// <summary>
+    /// Scheme of the URLs which identify an installed app instead of a web site (see
+    /// Util.SetNextFreeUrlField). They are stored in the additional URL fields, but
+    /// they are no host names.
+    /// </summary>
+    private const string AndroidAppScheme = "androidapp://";
+
     private readonly IKp2aApp _app;
 
 
@@ -88,6 +96,22 @@ namespace keepass2android
 
       database.Root.SearchEntries(sp, listResults, new NullStatusLogger());
 
+      // SearchEntries only examines the URL field. Additional URL fields
+      // (KP2A_URL, KP2A_URL_1, ...) must be considered as well, so that a URL
+      // remembered there is found with the same priority as one in the URL field.
+      foreach (PwEntry entry in database.EntriesById.Values)
+      {
+        if (!entry.GetSearchingEnabled() || (pgResults.Entries.IndexOf(entry) >= 0))
+          continue;
+        foreach (string urlValue in GetUrlFieldValues(entry, database))
+        {
+          if (urlValue.IndexOf(url, StringComparison.InvariantCultureIgnoreCase) >= 0)
+          {
+            pgResults.AddEntry(entry, false);
+            break;
+          }
+        }
+      }
 
       return pgResults;
 
@@ -120,6 +144,28 @@ namespace keepass2android
       return UrlUtil.GetHost(url.Trim());
     }
 
+    /// <summary>
+    /// Returns the URL values of an entry which are relevant for URL matching: the
+    /// standard URL field and all additional URL fields (see AdditionalUrlFields).
+    /// </summary>
+    private static IEnumerable<string> GetUrlFieldValues(PwEntry entry, Database database)
+    {
+      yield return GetCompiledFieldValue(entry, database, PwDefs.UrlField);
+
+      foreach (KeyValuePair<string, ProtectedString> kvp in entry.Strings)
+      {
+        if (!AdditionalUrlFields.IsAdditionalUrlFieldName(kvp.Key))
+          continue;
+        yield return GetCompiledFieldValue(entry, database, kvp.Key);
+      }
+    }
+
+    private static string GetCompiledFieldValue(PwEntry entry, Database database, string fieldName)
+    {
+      string value = entry.Strings.ReadSafe(fieldName);
+      return SprEngine.Compile(value, new SprContext(entry, database.KpDatabase, SprCompileFlags.References));
+    }
+
     public PwGroup SearchForHost(Database database, String url, bool allowSubdomains)
     {
       String host = ExtractHost(url);
@@ -131,11 +177,16 @@ namespace keepass2android
       {
         if (!entry.GetSearchingEnabled())
           continue;
-        string otherUrl = entry.Strings.ReadSafe(PwDefs.UrlField);
-        otherUrl = SprEngine.Compile(otherUrl, new SprContext(entry, database.KpDatabase, SprCompileFlags.References));
-        if (UrlHostMatching.HostsMatch(host, ExtractHost(otherUrl), allowSubdomains))
+        foreach (string otherUrl in GetUrlFieldValues(entry, database))
         {
-          pgResults.AddEntry(entry, false);
+          if (otherUrl.StartsWith(AndroidAppScheme, StringComparison.OrdinalIgnoreCase))
+            continue; // app identifiers are not host names
+
+          if (UrlHostMatching.HostsMatch(host, ExtractHost(otherUrl), allowSubdomains))
+          {
+            pgResults.AddEntry(entry, false);
+            break;
+          }
         }
       }
       return pgResults;
