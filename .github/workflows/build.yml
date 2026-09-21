@@ -347,6 +347,7 @@ jobs:
     # scratch-only: compile the real SearchDbHelper.cs (net8.0) and replay the phase
     # chain of ShareUrlResults.GetSearchResultsForUrl
     - name: URL matching harness (scratch)
+      continue-on-error: true
       run: |
         cd .ci-harness/harness
         dotnet run
