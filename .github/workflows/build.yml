@@ -1,9 +1,11 @@
-name: Build keepass2android app
+﻿name: Build keepass2android app
 
 on:
   push:
     branches:
       - main
+      # scratch-only: build a test APK from a fix branch without opening a PR
+      - 'ci/**'
   pull_request:
 
 jobs:
@@ -293,6 +295,17 @@ jobs:
     - name: Display java version
       run: java -version
 
+    # scratch-only: force the .NET 9 SDK band for the net9.0-android build
+    - name: Pin .NET SDK 9 (scratch)
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Workload diagnostics (scratch)
+      run: |
+        dotnet --version
+        dotnet workload list
+
     # Some components of Keepass2Android currently target android API 26 which are not available on the runner
     - name: Download android-26 API
       shell: cmd
@@ -366,7 +379,7 @@ jobs:
     - name: Archive production artifacts (nonet)
       uses: actions/upload-artifact@v4
       with:
-        name: archive APK ('nonet' built on ${{ github.job }})
+        name: archive APK ('nonet' ${{ github.ref_name }})
         path: |
           src/keepass2android-app/bin/Release/net9.0-android/publish/*.apk
 
